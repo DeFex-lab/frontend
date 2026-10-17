@@ -17,6 +17,13 @@ const notificationIcons = {
   warning: AlertTriangle,
 };
 
+const DEFAULT_TIMEOUTS: Record<Notification['type'], number | null> = {
+  success: 5000,
+  info: 5000,
+  warning: 6000,
+  error: null,
+};
+
 export function NotificationProvider(): JSX.Element {
   const notifications = useAppStore((state) => state.notifications);
   const removeNotification = useAppStore((state) => state.removeNotification);
@@ -42,10 +49,18 @@ interface NotificationItemProps {
 function NotificationItem({ notification, onRemove }: NotificationItemProps): JSX.Element {
   const Icon = notificationIcons[notification.type];
 
+  // Resolve timeout: explicit duration (if provided), otherwise type default.
+  // Errors default to no timeout so they remain until dismissed.
+  const resolvedTimeout =
+    typeof notification.duration === 'number'
+      ? notification.duration
+      : DEFAULT_TIMEOUTS[notification.type];
+
   useEffect(() => {
-    const timer = setTimeout(onRemove, notification.duration || 5000);
+    if (resolvedTimeout === null || resolvedTimeout <= 0) return;
+    const timer = setTimeout(onRemove, resolvedTimeout);
     return () => clearTimeout(timer);
-  }, [notification.duration, onRemove]);
+  }, [resolvedTimeout, onRemove]);
 
   const colorClasses = {
     success: 'border-success/30 bg-success/10 text-success',
@@ -56,6 +71,7 @@ function NotificationItem({ notification, onRemove }: NotificationItemProps): JS
 
   return (
     <div
+      role="alert"
       className={cn(
         'rounded-lg border p-4 flex gap-3 items-start animate-slide-down pointer-events-auto',
         colorClasses[notification.type]
@@ -67,7 +83,9 @@ function NotificationItem({ notification, onRemove }: NotificationItemProps): JS
         <p className="text-sm">{notification.message}</p>
       </div>
       <button
+        type="button"
         onClick={onRemove}
+        aria-label="Dismiss notification"
         className="text-current/60 hover:text-current flex-shrink-0 transition-smooth"
       >
         <X className="w-4 h-4" />
@@ -81,20 +99,43 @@ function NotificationItem({ notification, onRemove }: NotificationItemProps): JS
  */
 export function useNotification(): {
   notify: (notification: Omit<Notification, 'id'>) => void;
-  success: (message: string, title?: string) => void;
-  error: (message: string, title?: string) => void;
-  info: (message: string, title?: string) => void;
-  warning: (message: string, title?: string) => void;
+  success: (message: string, title?: string, duration?: number | null) => void;
+  error: (message: string, title?: string, duration?: number | null) => void;
+  info: (message: string, title?: string, duration?: number | null) => void;
+  warning: (message: string, title?: string, duration?: number | null) => void;
 } {
   const addNotification = useAppStore((state) => state.addNotification);
 
   return {
     notify: addNotification,
-    success: (message, title) =>
-      addNotification({ type: 'success', message, title, duration: 5000 }),
-    error: (message, title) => addNotification({ type: 'error', message, title, duration: 7000 }),
-    info: (message, title) => addNotification({ type: 'info', message, title, duration: 5000 }),
-    warning: (message, title) =>
-      addNotification({ type: 'warning', message, title, duration: 6000 }),
+    success: (message, title, duration) =>
+      addNotification({
+        type: 'success',
+        message,
+        title,
+        duration: duration === undefined ? 5000 : duration,
+      }),
+    error: (message, title, duration) =>
+      addNotification({
+        type: 'error',
+        message,
+        title,
+        // Errors remain visible until the user dismisses them by default.
+        duration: duration === undefined ? null : duration,
+      }),
+    info: (message, title, duration) =>
+      addNotification({
+        type: 'info',
+        message,
+        title,
+        duration: duration === undefined ? 5000 : duration,
+      }),
+    warning: (message, title, duration) =>
+      addNotification({
+        type: 'warning',
+        message,
+        title,
+        duration: duration === undefined ? 6000 : duration,
+      }),
   };
 }

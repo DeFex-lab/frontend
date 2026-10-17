@@ -1,0 +1,18 @@
+{
+  "default_branch": "main",
+  "branches": [
+    "fix/issue-175-fix-ensure-notifications-dismiss-automatically",
+    "main",
+    "origin"
+  ],
+  "parent": {
+    "fix/issue-175-fix-ensure-notifications-dismiss-automatically": "main",
+    "main": null,
+    "origin": "main"
+  },
+  "order": [
+    "main",
+    "fix/issue-175-fix-ensure-notifications-dismiss-automatically",
+    "origin"
+  ]
+}

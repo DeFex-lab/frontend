@@ -19,7 +19,6 @@ benchmarks/results.json
 # Misc
 .DS_Store
 *.pem
-.env.local
 .env.development.local
 .env.test.local
 .env.production.local
@@ -31,7 +30,6 @@ yarn-error.log*
 
 # IDE
 .idea/
-.vscode/
 *.swp
 *.swo
 
@@ -40,3 +38,4 @@ yarn-error.log*
 Thumbs.db
 
 fix.md
+config.bat

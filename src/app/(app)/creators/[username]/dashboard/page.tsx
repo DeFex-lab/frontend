@@ -27,6 +27,7 @@ import { PushNotificationPermissionPrompt } from '@/components/shared/push-notif
 import Link from 'next/link';
 import { SubscriptionManagement } from '@/components/sections/subscription-management';
 import { TipTierSettings } from '@/components/sections/tip-tier-settings';
+import { CreatorTierBenefits } from '@/components/sections/creator-tier-benefits';
 import { ScheduledTipsDashboard } from '@/components/sections/scheduled-tips-dashboard';
 import { CreatorCollaborations } from '@/components/sections/creator-collaborations';
 import { CreatorCommissionRequests } from '@/components/sections/creator-commission-requests';
@@ -132,6 +133,8 @@ function CreatorDashboardPageContent(): JSX.Element {
       </div>
 
       <PushNotificationPermissionPrompt />
+
+      <CreatorTierBenefits totalEarnings={balance?.totalEarnings ?? 0} />
 
       <SubscriptionManagement creatorId={username} />
       <TipTierSettings creatorId={username} />

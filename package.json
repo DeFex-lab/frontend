@@ -4,9 +4,9 @@
   "description": "Dorisio frontend - Next.js web application",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "node init && next dev",
+    "build": "node init && next build",
+    "start": "node init && next start",
     "lint": "eslint src --ext .ts,.tsx",
     "format": "prettier --write src",
     "type-check": "tsc --noEmit",
@@ -22,7 +22,7 @@
     "bench:compare": "node scripts/benchmark-compare.mjs",
     "bench:check": "node scripts/check-perf-thresholds.js",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "node init && storybook build"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.4",

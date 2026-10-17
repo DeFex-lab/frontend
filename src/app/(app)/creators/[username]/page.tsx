@@ -21,7 +21,9 @@ import {
   TransactionTableSkeleton,
 } from '@/components/shared/creator-skeletons';
 import { CreatorVerificationBadge } from '@/components/shared/creator-verification-badge';
+import { CreatorTierBadge } from '@/components/shared/creator-tier-badge';
 import { CreatorBio } from '@/components/sections/creator-bio';
+import { resolveCreatorTier } from '@/lib/creator-tiers';
 import { SubscriptionTiers } from '@/components/sections/subscription-tiers';
 import { SubscriberOnlyContent } from '@/components/sections/subscriber-only-content';
 import { ExclusiveContentFeed } from '@/components/sections/exclusive-content-feed';
@@ -67,6 +69,7 @@ export default function CreatorProfilePage(): JSX.Element {
         .filter((tx) => tx.senderId === user.id && tx.status === 'confirmed')
         .reduce((sum, tx) => sum + tx.amount, 0)
     : 0;
+  const creatorTier = resolveCreatorTier(state.creator?.totalEarnings ?? 0);
   const collaborations = state.creator ? getPublicCollaborations(state.creator.id) : [];
 
   // Fetch creator profile
@@ -161,9 +164,17 @@ export default function CreatorProfilePage(): JSX.Element {
                   verificationReason={state.creator.verificationReason}
                   showDetails
                 />
+                <CreatorTierBadge tier={creatorTier} size="md" />
               </div>
 
-              <p className="text-muted-foreground mb-4">@{state.creator.username}</p>
+              <p className="text-muted-foreground mb-4">
+                @{state.creator.username}
+              </p>
+
+              <p className="text-sm text-muted-foreground mb-6">
+                Creator tier:{' '}
+                {creatorTier.charAt(0).toUpperCase() + creatorTier.slice(1)}
+              </p>
 
               {state.creator.bio && (
                 <CreatorBio value={state.creator.bio} className="mb-6 max-w-2xl text-lg" />

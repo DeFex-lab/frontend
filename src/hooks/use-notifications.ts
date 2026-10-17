@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Notification, NotificationType } from '@/types';
 import { useDorisio } from 'dorisio-sdk/react';
 import {
@@ -12,6 +12,8 @@ import {
 
 const COLLABORATION_NOTICE_PREFIX = 'collaboration-notice-';
 const DEFAULT_AUTO_DISMISS_MS = 5000;
+const AUTO_DISMISS_TYPES: NotificationType[] = ['info', 'success'];
+const AUTO_DISMISS_OVERRIDE_KEY = 'autoDismissMs';
 
 export function useNotifications(userId?: string) {
   const { client } = useDorisio();
@@ -19,45 +21,7 @@ export function useNotifications(userId?: string) {
   const [loading, setLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   const sdkNotificationsRef = useRef<Notification[]>([]);
-  const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-
-  const clearTimer = (id: string) => {
-    const timer = timersRef.current[id];
-    if (timer !== undefined) {
-      clearTimeout(timer);
-      delete timersRef.current[id];
-    }
-  };
-
-  const dismissNotification = (notificationId: string) => {
-    clearTimer(notificationId);
-    setNotifications((prev) => {
-      const target = prev.find((n) => n.id === notificationId);
-      if (target && !target.read) {
-        setUnreadCount((count) => Math.max(0, count - 1));
-      }
-      return prev.filter((n) => n.id !== notificationId);
-    });
-  };
-
-  const scheduleAutoDismiss = (notification: Notification) => {
-    const type = notification.type;
-    // Error notifications remain visible until the user dismisses them.
-    if (type === 'error') {
-      clearTimer(notification.id);
-      return;
-    }
-
-    const override = (notification as Notification & { autoDismissMs?: number | null }).autoDismissMs;
-    const duration = override === null ? null : override ?? DEFAULT_AUTO_DISMISS_MS;
-    clearTimer(notification.id);
-    if (duration === null || duration <= 0) {
-      return;
-    }
-    timersRef.current[notification.id] = setTimeout(() => {
-      dismissNotification(notification.id);
-    }, duration);
-  };
+  const autoDismissTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
     async function fetchNotifications() {
@@ -110,23 +74,56 @@ export function useNotifications(userId?: string) {
     };
   }, [userId, client]);
 
-  // Schedule auto-dismiss for newly added notifications.
+  const clearAutoDismissTimer = useCallback((notificationId: string) => {
+    const timer = autoDismissTimersRef.current.get(notificationId);
+    if (timer) {
+      clearTimeout(timer);
+      autoDismissTimersRef.current.delete(notificationId);
+    }
+  }, []);
+
+  const dismissNotification = useCallback(
+    (notificationId: string) => {
+      clearAutoDismissTimer(notificationId);
+      setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+      setUnreadCount((prev) => {
+        const target = notifications.find((n) => n.id === notificationId);
+        return target && !target.read ? Math.max(0, prev - 1) : prev;
+      });
+    },
+    [clearAutoDismissTimer, notifications]
+  );
+
+  const scheduleAutoDismiss = useCallback(
+    (notification: Notification) => {
+      if (!AUTO_DISMISS_TYPES.includes(notification.type)) return;
+      const override = (notification as Notification & { autoDismissMs?: number })[AUTO_DISMISS_OVERRIDE_KEY];
+      const timeout = override ?? DEFAULT_AUTO_DISMISS_MS;
+      if (timeout <= 0) return;
+      clearAutoDismissTimer(notification.id);
+      const timer = setTimeout(() => {
+        autoDismissTimersRef.current.delete(notification.id);
+        setNotifications((prev) => prev.filter((n) => n.id !== notification.id));
+        setUnreadCount((prev) => (notification.read ? prev : Math.max(0, prev - 1)));
+      }, timeout);
+      autoDismissTimersRef.current.set(notification.id, timer);
+    },
+    [clearAutoDismissTimer]
+  );
+
   useEffect(() => {
-    const knownIds = new Set(Object.keys(timersRef.current));
-    for (const notification of notifications) {
-      if (!knownIds.has(notification.id)) {
+    notifications.forEach((notification) => {
+      if (!autoDismissTimersRef.current.has(notification.id)) {
         scheduleAutoDismiss(notification);
       }
-    }
-  }, [notifications]);
+    });
+  }, [notifications, scheduleAutoDismiss]);
 
-  // Clear off pending timers on unmount.
   useEffect(() => {
-    const timers = timersRef.current;
+    const timers = autoDismissTimersRef.current;
     return () => {
-      for (const timer of Object.values(timers)) {
-        clearTimeout(timer);
-      }
+      timers.forEach((timer) => clearTimeout(timer));
+      timers.clear();
     };
   }, []);
 
@@ -148,6 +145,8 @@ export function useNotifications(userId?: string) {
   };
 
   const markAllAsRead = async () => {
+    autoDismissTimersRef.current.forEach((timer) => clearTimeout(timer));
+    autoDismissTimersRef.current.clear();
     if (userId) markAllCollaborationNotificationsRead(userId);
     try {
       await client.markAllNotificationsAsRead(userId);
@@ -168,7 +167,7 @@ export function useNotifications(userId?: string) {
     unreadCount,
     markAsRead,
     markAllAsRead,
-    filterByType,
     dismissNotification,
+    filterByType,
   };
 }

@@ -9,6 +9,7 @@ import { useEffect } from 'react';
 import { AlertCircle, CheckCircle, Info, AlertTriangle, X } from 'lucide-react';
 import { useAppStore, Notification } from '@/stores/app-store';
 import { cn } from '@/lib/utils';
+import { useSafeTimeout } from '@/hooks/use-timeout';
 
 const notificationIcons = {
   success: CheckCircle,
@@ -17,7 +18,11 @@ const notificationIcons = {
   warning: AlertTriangle,
 };
 
-const DEFAULT_TIMEOUTS: Record<Notification['type'], number | null> = {
+/**
+ * Default auto-dismiss timeouts (ms) by notification type.
+ * Error notifications default to null (i.e. persist until the user dismisses them).
+ */
+const DEFAULT_DISMISS_TIMEOUTS: Record<Notification['type'], number | null> = {
   success: 5000,
   info: 5000,
   warning: 6000,
@@ -48,19 +53,24 @@ interface NotificationItemProps {
 
 function NotificationItem({ notification, onRemove }: NotificationItemProps): JSX.Element {
   const Icon = notificationIcons[notification.type];
+  const { schedule, cancel } = useSafeTimeout();
 
-  // Resolve timeout: explicit duration (if provided), otherwise type default.
-  // Errors default to no timeout so they remain until dismissed.
-  const resolvedTimeout =
-    typeof notification.duration === 'number'
+  // Resolve the effective dismiss timeout:
+  //   1. An explicit per-notification duration always wins.
+  //   2. Otherwise fall back to the type default (error => persist).
+  const dismissTimeout =
+    typeof notification.duration === 'number' && notification.duration > 0
       ? notification.duration
-      : DEFAULT_TIMEOUTS[notification.type];
+      : DEFAULT_DISMISS_TIMEOUTS[notification.type];
 
   useEffect(() => {
-    if (resolvedTimeout === null || resolvedTimeout <= 0) return;
-    const timer = setTimeout(onRemove, resolvedTimeout);
-    return () => clearTimeout(timer);
-  }, [resolvedTimeout, onRemove]);
+    // Error notifications (or any type with a null timeout) remain visible
+    // until the user explicitly dismisses them.
+    if (dismissTimeout === null) return;
+
+    const timer = schedule(onRemove, dismissTimeout);
+    return () => cancel(timer);
+  }, [dismissTimeout, onRemove, schedule, cancel]);
 
   const colorClasses = {
     success: 'border-success/30 bg-success/10 text-success',
@@ -71,11 +81,11 @@ function NotificationItem({ notification, onRemove }: NotificationItemProps): JS
 
   return (
     <div
-      role="alert"
       className={cn(
         'rounded-lg border p-4 flex gap-3 items-start animate-slide-down pointer-events-auto',
         colorClasses[notification.type]
       )}
+      role="alert"
     >
       <Icon className="w-5 h-5 flex-shrink-0 mt-0.5" />
       <div className="flex-1">
@@ -99,43 +109,25 @@ function NotificationItem({ notification, onRemove }: NotificationItemProps): JS
  */
 export function useNotification(): {
   notify: (notification: Omit<Notification, 'id'>) => void;
-  success: (message: string, title?: string, duration?: number | null) => void;
-  error: (message: string, title?: string, duration?: number | null) => void;
-  info: (message: string, title?: string, duration?: number | null) => void;
-  warning: (message: string, title?: string, duration?: number | null) => void;
+  success: (message: string, title?: string) => void;
+  error: (message: string, title?: string) => void;
+  info: (message: string, title?: string) => void;
+  warning: (message: string, title?: string) => void;
 } {
   const addNotification = useAppStore((state) => state.addNotification);
 
   return {
+    // Pass through the notification as-is so callers can override `type`,
+    // `title`, or `duration` per notification.
     notify: addNotification,
-    success: (message, title, duration) =>
-      addNotification({
-        type: 'success',
-        message,
-        title,
-        duration: duration === undefined ? 5000 : duration,
-      }),
-    error: (message, title, duration) =>
-      addNotification({
-        type: 'error',
-        message,
-        title,
-        // Errors remain visible until the user dismisses them by default.
-        duration: duration === undefined ? null : duration,
-      }),
-    info: (message, title, duration) =>
-      addNotification({
-        type: 'info',
-        message,
-        title,
-        duration: duration === undefined ? 5000 : duration,
-      }),
-    warning: (message, title, duration) =>
-      addNotification({
-        type: 'warning',
-        message,
-        title,
-        duration: duration === undefined ? 6000 : duration,
-      }),
+    success: (message, title) =>
+      addNotification({ type: 'success', message, title, duration: 5000 }),
+    // Errors persist until the user dismisses them (duration: null).
+    error: (message, title) =>
+      addNotification({ type: 'error', message, title, duration: null }),
+    info: (message, title) =>
+      addNotification({ type: 'info', message, title, duration: 5000 }),
+    warning: (message, title) =>
+      addNotification({ type: 'warning', message, title, duration: 6000 }),
   };
 }
